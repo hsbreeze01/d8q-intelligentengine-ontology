@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  ontology-api:
+    build: .
+    container_name: d8q-ontology-api
+    ports:
+      - "8080:8080"
+    environment:
+      - GRAPHDB_URL=http://localhost:7200
+      - REPOSITORY_ID=chan
+      - NAMED_GRAPH=http://d8q.com/graph/chan
+    volumes:
+      - ./ontology:/app/ontology:ro
+      - ./data:/app/data
+    networks:
+      - d8q-net
+
+networks:
+  d8q-net:
+    driver: bridge

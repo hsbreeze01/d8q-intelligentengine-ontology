@@ -1,0 +1,224 @@
+@prefix chan: <http://d8q.com/chan/> .
+@prefix fibo-md: <https://spec.edmcouncil.org/fibo/MD/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix pe: <http://d8q.com/pe/> .
+
+#################################################################
+# Chan Theory Core Ontology
+# Minimal set for: Stroke(笔), LineSegment(线段), Center(中枢), BuyPoint(买卖点)
+#################################################################
+
+# ---------- Level / 级别 ----------
+chan:Level a rdfs:Class ;
+    rdfs:label "缠论级别"@zh, "Chan Level"@en ;
+    rdfs:subClassOf fibo-md:TimeFrame .
+
+chan:M1 a chan:Level ; rdfs:label "1分钟"@zh .
+chan:M5 a chan:Level ; rdfs:label "5分钟"@zh .
+chan:M15 a chan:Level ; rdfs:label "15分钟"@zh .
+chan:M30 a chan:Level ; rdfs:label "30分钟"@zh .
+chan:H1 a chan:Level ; rdfs:label "1小时"@zh .
+chan:D a chan:Level ; rdfs:label "日线"@zh .
+chan:W a chan:Level ; rdfs:label "周线"@zh .
+chan:M a chan:Level ; rdfs:label "月线"@zh .
+
+# ---------- Fractal / 分型 ----------
+chan:Fractal a rdfs:Class ;
+    rdfs:label "分型"@zh ;
+    rdfs:comment "顶分型/底分型，笔的端点"@zh .
+
+chan:FractalType a rdfs:Class ;
+    rdfs:label "分型类型"@zh .
+chan:TopFractal a chan:FractalType ; rdfs:label "顶分型"@zh .
+chan:BottomFractal a chan:FractalType ; rdfs:label "底分型"@zh .
+
+chan:hasFractalType a owl:ObjectProperty ;
+    rdfs:domain chan:Fractal ;
+    rdfs:range chan:FractalType .
+
+chan:fractalTime a owl:DatatypeProperty ;
+    rdfs:domain chan:Fractal ;
+    rdfs:range xsd:dateTime .
+
+chan:fractalPrice a owl:DatatypeProperty ;
+    rdfs:domain chan:Fractal ;
+    rdfs:range xsd:decimal .
+
+# ---------- Stroke / 笔 ----------
+chan:Stroke a rdfs:Class ;
+    rdfs:label "笔"@zh ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty chan:hasStart ;
+        owl:someValuesFrom chan:Fractal
+    ] , [
+        a owl:Restriction ;
+        owl:onProperty chan:hasEnd ;
+        owl:someValuesFrom chan:Fractal
+    ] , [
+        a owl:Restriction ;
+        owl:onProperty chan:hasLevel ;
+        owl:cardinality 1
+    ] .
+
+chan:hasStart a owl:ObjectProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range chan:Fractal ;
+    rdfs:label "起始分型"@zh .
+
+chan:hasEnd a owl:ObjectProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range chan:Fractal ;
+    rdfs:label "结束分型"@zh .
+
+chan:hasLevel a owl:ObjectProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range chan:Level .
+
+chan:strokeDirection a owl:ObjectProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range chan:Direction ;
+    rdfs:label "笔方向"@zh .
+
+chan:Direction a rdfs:Class ;
+    rdfs:label "方向"@zh .
+chan:Up a chan:Direction ; rdfs:label "向上"@zh .
+chan:Down a chan:Direction ; rdfs:label "向下"@zh .
+
+chan:strokeHigh a owl:DatatypeProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range xsd:decimal .
+chan:strokeLow a owl:DatatypeProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range xsd:decimal .
+chan:strokeStartTime a owl:DatatypeProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range xsd:dateTime .
+chan:strokeEndTime a owl:DatatypeProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range xsd:dateTime .
+
+# ---------- LineSegment / 线段 ----------
+chan:LineSegment a rdfs:Class ;
+    rdfs:label "线段"@zh ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty chan:consistsOf ;
+        owl:minQualifiedCardinality 3 ;
+        owl:onClass chan:Stroke
+    ] , [
+        a owl:Restriction ;
+        owl:onProperty chan:hasLevel ;
+        owl:cardinality 1
+    ] .
+
+chan:consistsOf a owl:ObjectProperty, owl:TransitiveProperty ;
+    rdfs:domain chan:LineSegment ;
+    rdfs:range chan:Stroke ;
+    rdfs:label "包含"@zh .
+
+chan:segmentDirection a owl:ObjectProperty ;
+    rdfs:domain chan:LineSegment ;
+    rdfs:range chan:Direction .
+
+chan:segmentHigh a owl:DatatypeProperty ;
+    rdfs:domain chan:LineSegment ;
+    rdfs:range xsd:decimal .
+chan:segmentLow a owl:DatatypeProperty ;
+    rdfs:domain chan:LineSegment ;
+    rdfs:range xsd:decimal .
+chan:segmentStartTime a owl:DatatypeProperty ;
+    rdfs:domain chan:LineSegment ;
+    rdfs:range xsd:dateTime .
+chan:segmentEndTime a owl:DatatypeProperty ;
+    rdfs:domain chan:LineSegment ;
+    rdfs:range xsd:dateTime .
+
+# ---------- Center / 中枢 ----------
+chan:Center a rdfs:Class ;
+    rdfs:label "中枢"@zh ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty chan:consistsOf ;
+        owl:minQualifiedCardinality 3 ;
+        owl:onClass chan:LineSegment
+    ] , [
+        a owl:Restriction ;
+        owl:onProperty chan:hasLevel ;
+        owl:cardinality 1
+    ] .
+
+chan:hasZG a owl:DatatypeProperty ;
+    rdfs:domain chan:Center ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "中枢最高价(ZG)"@zh .
+chan:hasZD a owl:DatatypeProperty ;
+    rdfs:domain chan:Center ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "中枢最低价(ZD)"@zh .
+chan:hasGG a owl:DatatypeProperty ;
+    rdfs:domain chan:Center ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "中枢高点(GG)"@zh .
+chan:hasDD a owl:DatatypeProperty ;
+    rdfs:domain chan:Center ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "中枢低点(DD)"@zh .
+
+# ---------- Buy/Sell Point / 买卖点 ----------
+chan:TradePoint a rdfs:Class ;
+    rdfs:label "买卖点"@zh .
+chan:BuyPoint a rdfs:Class ;
+    rdfs:subClassOf chan:TradePoint ;
+    rdfs:label "买点"@zh .
+chan:SellPoint a rdfs:Class ;
+    rdfs:subClassOf chan:TradePoint ;
+    rdfs:label "卖点"@zh .
+
+chan:PointType a rdfs:Class ;
+    rdfs:label "买卖点类型"@zh .
+chan:Type1 a chan:PointType ; rdfs:label "一类买点/卖点"@zh .
+chan:Type2 a chan:PointType ; rdfs:label "二类买点/卖点"@zh .
+chan:Type3 a chan:PointType ; rdfs:label "三类买点/卖点"@zh .
+
+chan:pointType a owl:ObjectProperty ;
+    rdfs:domain chan:TradePoint ;
+    rdfs:range chan:PointType .
+
+chan:belongsToLevel a owl:ObjectProperty ;
+    rdfs:domain chan:TradePoint ;
+    rdfs:range chan:Level .
+
+chan:confirmedBy a owl:ObjectProperty ;
+    rdfs:domain chan:TradePoint ;
+    rdfs:range [ owl:unionOf (chan:Center chan:LineSegment) ] ;
+    rdfs:label "被...确认"@zh .
+
+chan:pointTime a owl:DatatypeProperty ;
+    rdfs:domain chan:TradePoint ;
+    rdfs:range xsd:dateTime .
+chan:pointPrice a owl:DatatypeProperty ;
+    rdfs:domain chan:TradePoint ;
+    rdfs:range xsd:decimal .
+
+# ---------- Market Data Anchor ----------
+chan:Symbol a rdfs:Class ;
+    rdfs:label "标的代码"@zh ;
+    rdfs:subClassOf pe:Instrument .
+
+chan:hasSymbol a owl:ObjectProperty ;
+    rdfs:domain chan:Stroke ;
+    rdfs:range chan:Symbol .
+
+# ---------- Pe Core Anchor (minimal) ----------
+pe:Instrument a rdfs:Class ;
+    rdfs:label "标的工具"@zh .
+pe:hasFigi a owl:DatatypeProperty ;
+    rdfs:domain pe:Instrument ;
+    rdfs:range xsd:string .
+pe:hasSymbol a owl:DatatypeProperty ;
+    rdfs:domain pe:Instrument ;
+    rdfs:range xsd:string .
