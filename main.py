@@ -2,8 +2,11 @@
 d8q-intelligentengine-ontology: FastAPI entry point.
 Exposes SPARQL endpoint + Agent tool APIs.
 """
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from store import get_store, reload_ontology
@@ -16,6 +19,19 @@ app = FastAPI(
     description="缠论知识图谱服务：三元组存储 + SPARQL + Agent Tool",
     version="0.1.0",
 )
+
+# ---------- CORS ----------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------- Static (YASGUI Explorer) ----------
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/explorer", StaticFiles(directory=str(_static_dir), html=True), name="static")
 
 
 # ---------- Lifecycle ----------

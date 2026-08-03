@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>d8q Ontology - SPARQL Explorer</title>
+  <link rel="stylesheet" href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css" />
+  <style>
+    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #f5f5f5; }
+    h1 { font-size: 1.4em; color: #333; margin-bottom: 16px; }
+    .info { font-size: 0.85em; color: #666; margin-bottom: 12px; }
+    #yasgui { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <h1>🧠 d8q Chan Theory Ontology - SPARQL Explorer</h1>
+  <div class="info">Endpoint: <code>/sparql</code> (same-origin) | Store: Oxigraph | Ontology: chan.ttl</div>
+  <div id="yasgui"></div>
+  <script src="https://unpkg.com/@triply/yasgui/build/yasgui.min.js"></script>
+  <script>
+    const yasgui = new Yasgui(document.getElementById("yasgui"), {
+      requestConfig: {
+        endpoint: "/sparql",
+        method: "POST"
+      },
+      yasqe: {
+        value: `PREFIX chan: <http://d8q.com/chan/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+
+# 查看所有类及其标签
+SELECT ?class ?label WHERE {
+  ?class a rdfs:Class .
+  OPTIONAL { ?class rdfs:label ?label }
+}
+ORDER BY ?class`
+      }
+    });
+  </script>
+</body>
+</html>
