@@ -57,9 +57,26 @@ async def readyz():
 # ---------- SPARQL Endpoint ----------
 @app.post("/sparql", response_class=PlainTextResponse)
 async def sparql_endpoint(request: Request):
-    """Standard SPARQL 1.1 endpoint (POST)."""
+    """Standard SPARQL 1.1 Protocol endpoint (POST).
+
+    Supports:
+    - application/x-www-form-urlencoded with query= parameter (YASGUI default)
+    - application/sparql-query with raw SPARQL in body
+    - text/plain with raw SPARQL in body (legacy)
+    """
+    content_type = request.headers.get("content-type", "")
     body = await request.body()
-    query = body.decode("utf-8") if body else ""
+
+    if "application/x-www-form-urlencoded" in content_type:
+        from urllib.parse import parse_qs
+        params = parse_qs(body.decode("utf-8"))
+        query = params.get("query", [""])[0]
+    elif "application/sparql-query" in content_type:
+        query = body.decode("utf-8")
+    else:
+        # Fallback: treat body as raw SPARQL
+        query = body.decode("utf-8")
+
     if not query:
         raise HTTPException(status_code=400, detail="Empty query")
     try:
