@@ -50,13 +50,14 @@ async def sparql_endpoint(request: Request):
         store = get_store()
         results = store.query(query)
         # Convert to SPARQL JSON Results format
+        variables = results.variables  # list of Variable objects
         rows = []
         for row in results:
             d = {}
-            for var in row.variables:
+            for var in variables:
                 val = row[var]
                 if val is not None:
-                    d[var] = {"value": str(val), "type": "literal"}
+                    d[var.value] = {"value": str(val), "type": "literal"}
             rows.append(d)
         return json.dumps({"results": {"bindings": rows}}, ensure_ascii=False)
     except Exception as e:
