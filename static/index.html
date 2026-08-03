@@ -3,16 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <title>d8q Ontology - SPARQL Explorer</title>
-  <link rel="stylesheet" href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css" />
   <style>
-    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #f5f5f5; }
-    h1 { font-size: 1.4em; color: #333; margin-bottom: 16px; }
-    .info { font-size: 0.85em; color: #666; margin-bottom: 12px; }
-    #yasgui { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #eee; }
+    nav { display: flex; align-items: center; gap: 20px; padding: 12px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+    nav h1 { font-size: 1.1em; color: #4fc3f7; }
+    nav a { color: #aaa; text-decoration: none; font-size: 0.9em; padding: 4px 12px; border-radius: 4px; transition: all 0.2s; }
+    nav a:hover { color: #fff; background: #0f3460; }
+    nav a.active { color: #4fc3f7; background: #0f3460; }
+    .info { font-size: 0.85em; color: #666; padding: 12px 24px; }
+    #yasgui { padding: 16px 24px; }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css" />
 </head>
 <body>
-  <h1>🧠 d8q Chan Theory Ontology - SPARQL Explorer</h1>
+  <nav>
+    <h1>🧠 d8q Ontology</h1>
+    <a href="/explorer/" class="active">SPARQL</a>
+    <a href="/explorer/schema.html">建模视图</a>
+    <a href="/explorer/topo.html">Topo 视图</a>
+  </nav>
   <div class="info">Endpoint: <code>/sparql</code> (same-origin) | Store: Oxigraph | Ontology: chan.ttl</div>
   <div id="yasgui"></div>
   <script src="https://unpkg.com/@triply/yasgui/build/yasgui.min.js"></script>

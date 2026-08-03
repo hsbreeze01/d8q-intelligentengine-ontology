@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>d8q Ontology - 建模视图</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #eee; overflow: hidden; }
+    
+    /* Nav */
+    nav { display: flex; align-items: center; gap: 20px; padding: 12px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+    nav h1 { font-size: 1.1em; color: #4fc3f7; }
+    nav a { color: #aaa; text-decoration: none; font-size: 0.9em; padding: 4px 12px; border-radius: 4px; transition: all 0.2s; }
+    nav a:hover { color: #fff; background: #0f3460; }
+    nav a.active { color: #4fc3f7; background: #0f3460; }
+    
+    /* Layout */
+    .container { display: flex; height: calc(100vh - 49px); }
+    .sidebar { width: 280px; background: #16213e; border-right: 1px solid #0f3460; overflow-y: auto; padding: 16px; }
+    .sidebar h3 { font-size: 0.85em; color: #4fc3f7; margin: 12px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .sidebar .item { padding: 6px 10px; font-size: 0.85em; border-radius: 4px; cursor: pointer; margin: 2px 0; }
+    .sidebar .item:hover { background: #0f3460; }
+    .sidebar .item.class-item { border-left: 3px solid #4fc3f7; }
+    .sidebar .item.prop-item { border-left: 3px solid #66bb6a; }
+    .sidebar .item.selected { background: #0f3460; color: #fff; }
+    
+    /* Graph */
+    .graph-area { flex: 1; position: relative; }
+    svg { width: 100%; height: 100%; }
+    
+    /* Legend */
+    .legend { position: absolute; bottom: 16px; left: 16px; background: rgba(22,33,62,0.9); padding: 12px; border-radius: 8px; font-size: 0.8em; }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+    
+    /* Tooltip */
+    .tooltip { position: absolute; background: #16213e; border: 1px solid #0f3460; padding: 10px 14px; border-radius: 6px; font-size: 0.82em; pointer-events: none; opacity: 0; transition: opacity 0.2s; max-width: 320px; }
+    .tooltip .tt-title { font-weight: bold; color: #4fc3f7; margin-bottom: 4px; }
+    .tooltip .tt-row { color: #ccc; margin: 2px 0; }
+
+    /* Loading */
+    .loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4fc3f7; }
+  </style>
+</head>
+<body>
+  <nav>
+    <h1>🧠 d8q Ontology</h1>
+    <a href="/explorer/">SPARQL</a>
+    <a href="/explorer/schema.html" class="active">建模视图</a>
+    <a href="/explorer/topo.html">Topo 视图</a>
+  </nav>
+  
+  <div class="container">
+    <div class="sidebar" id="sidebar">
+      <h3>Classes</h3>
+      <div id="class-list"></div>
+      <h3>Properties</h3>
+      <div id="prop-list"></div>
+    </div>
+    <div class="graph-area">
+      <svg id="graph"></svg>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div> Class</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#66bb6a"></div> ObjectProperty</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffa726"></div> DatatypeProperty</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ab47bc"></div> Instance / Individual</div>
+      </div>
+      <div class="tooltip" id="tooltip"></div>
+      <div class="loading" id="loading">加载本体 schema...</div>
+    </div>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const SPARQL = '/sparql';
+    const tooltip = document.getElementById('tooltip');
+    const loading = document.getElementById('loading');
+
+    // --- SPARQL Queries ---
+    const QUERY_CLASSES = `
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      PREFIX owl: <http://www.w3.org/2002/07/owl#>
+      SELECT ?class ?label ?parent WHERE {
+        ?class a rdfs:Class .
+        OPTIONAL { ?class rdfs:label ?label FILTER(lang(?label)="zh") }
+        OPTIONAL { ?class rdfs:subClassOf ?parent . ?parent a rdfs:Class }
+      }`;
+
+    const QUERY_OBJ_PROPS = `
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      PREFIX owl: <http://www.w3.org/2002/07/owl#>
+      SELECT ?prop ?label ?domain ?range WHERE {
+        ?prop a owl:ObjectProperty .
+        OPTIONAL { ?prop rdfs:label ?label FILTER(lang(?label)="zh") }
+        OPTIONAL { ?prop rdfs:domain ?domain }
+        OPTIONAL { ?prop rdfs:range ?range }
+      }`;
+
+    const QUERY_DATA_PROPS = `
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      PREFIX owl: <http://www.w3.org/2002/07/owl#>
+      SELECT ?prop ?label ?domain ?range WHERE {
+        ?prop a owl:DatatypeProperty .
+        OPTIONAL { ?prop rdfs:label ?label FILTER(lang(?label)="zh") }
+        OPTIONAL { ?prop rdfs:domain ?domain }
+        OPTIONAL { ?prop rdfs:range ?range }
+      }`;
+
+    async function query(sparql) {
+      const resp = await fetch(SPARQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'query=' + encodeURIComponent(sparql)
+      });
+      const data = await resp.json();
+      return data.results.bindings;
+    }
+
+    function cleanUri(uri) {
+      if (!uri) return null;
+      return uri.replace(/^<|>$/g, '');
+    }
+
+    function shortName(uri) {
+      if (!uri) return '';
+      const clean = cleanUri(uri);
+      const hash = clean.lastIndexOf('#');
+      const slash = clean.lastIndexOf('/');
+      return clean.substring(Math.max(hash, slash) + 1);
+    }
+
+    function cleanLiteral(val) {
+      if (!val) return '';
+      return val.replace(/^"|"@.*$/g, '');
+    }
+
+    async function loadSchema() {
+      const [classes, objProps, dataProps] = await Promise.all([
+        query(QUERY_CLASSES), query(QUERY_OBJ_PROPS), query(QUERY_DATA_PROPS)
+      ]);
+
+      const nodes = new Map();
+      const links = [];
+
+      // Process classes
+      classes.forEach(row => {
+        const uri = cleanUri(row.class?.value);
+        if (!uri || uri.startsWith('http://www.w3.org')) return;
+        if (!nodes.has(uri)) {
+          nodes.set(uri, {
+            id: uri, name: shortName(uri),
+            label: cleanLiteral(row.label?.value) || shortName(uri),
+            type: 'class', props: []
+          });
+        }
+        const parentUri = cleanUri(row.parent?.value);
+        if (parentUri && !parentUri.startsWith('http://www.w3.org')) {
+          links.push({ source: uri, target: parentUri, type: 'subClassOf', label: 'subClassOf' });
+        }
+      });
+
+      // Process object properties as edges
+      objProps.forEach(row => {
+        const prop = cleanUri(row.prop?.value);
+        const domain = cleanUri(row.domain?.value);
+        const range = cleanUri(row.range?.value);
+        if (domain && range && nodes.has(domain) && nodes.has(range)) {
+          links.push({
+            source: domain, target: range, type: 'objectProperty',
+            label: cleanLiteral(row.label?.value) || shortName(prop),
+            uri: prop
+          });
+        }
+        // Add to domain node's props
+        if (domain && nodes.has(domain)) {
+          nodes.get(domain).props.push({
+            name: shortName(prop),
+            label: cleanLiteral(row.label?.value) || shortName(prop),
+            type: 'object', range: shortName(range)
+          });
+        }
+      });
+
+      // Process data properties (attach to class node)
+      dataProps.forEach(row => {
+        const prop = cleanUri(row.prop?.value);
+        const domain = cleanUri(row.domain?.value);
+        const range = cleanUri(row.range?.value);
+        if (domain && nodes.has(domain)) {
+          nodes.get(domain).props.push({
+            name: shortName(prop),
+            label: cleanLiteral(row.label?.value) || shortName(prop),
+            type: 'datatype', range: shortName(range)
+          });
+        }
+      });
+
+      return { nodes: Array.from(nodes.values()), links };
+    }
+
+    function renderGraph(data) {
+      const svg = d3.select('#graph');
+      const width = svg.node().clientWidth;
+      const height = svg.node().clientHeight;
+
+      svg.selectAll('*').remove();
+
+      const g = svg.append('g');
+
+      // Zoom
+      svg.call(d3.zoom().scaleExtent([0.3, 4]).on('zoom', (e) => {
+        g.attr('transform', e.transform);
+      }));
+
+      // Arrow markers
+      const defs = svg.append('defs');
+      ['#4fc3f7', '#66bb6a', '#ffa726'].forEach((color, i) => {
+        defs.append('marker')
+          .attr('id', `arrow-${i}`)
+          .attr('viewBox', '0 -5 10 10')
+          .attr('refX', 28).attr('refY', 0)
+          .attr('markerWidth', 6).attr('markerHeight', 6)
+          .attr('orient', 'auto')
+          .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', color);
+      });
+
+      // Force simulation
+      const simulation = d3.forceSimulation(data.nodes)
+        .force('link', d3.forceLink(data.links).id(d => d.id).distance(180))
+        .force('charge', d3.forceManyBody().strength(-600))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(50));
+
+      // Links
+      const link = g.append('g').selectAll('line')
+        .data(data.links).join('line')
+        .attr('stroke', d => d.type === 'subClassOf' ? '#4fc3f7' : '#66bb6a')
+        .attr('stroke-width', d => d.type === 'subClassOf' ? 2 : 1.5)
+        .attr('stroke-dasharray', d => d.type === 'subClassOf' ? '6,3' : 'none')
+        .attr('marker-end', d => d.type === 'subClassOf' ? 'url(#arrow-0)' : 'url(#arrow-1)')
+        .attr('opacity', 0.7);
+
+      // Link labels
+      const linkLabel = g.append('g').selectAll('text')
+        .data(data.links).join('text')
+        .text(d => d.label)
+        .attr('font-size', '10px')
+        .attr('fill', '#888')
+        .attr('text-anchor', 'middle');
+
+      // Nodes
+      const node = g.append('g').selectAll('g')
+        .data(data.nodes).join('g')
+        .call(d3.drag()
+          .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+          .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+        );
+
+      // Node circles
+      node.append('circle')
+        .attr('r', d => 20 + d.props.length * 2)
+        .attr('fill', '#0f3460')
+        .attr('stroke', '#4fc3f7')
+        .attr('stroke-width', 2);
+
+      // Node labels
+      node.append('text')
+        .text(d => d.label)
+        .attr('text-anchor', 'middle')
+        .attr('dy', '0.35em')
+        .attr('fill', '#fff')
+        .attr('font-size', '11px')
+        .attr('font-weight', 'bold');
+
+      // Hover
+      node.on('mouseover', (e, d) => {
+        let html = `<div class="tt-title">${d.label} (${d.name})</div>`;
+        html += `<div class="tt-row">URI: ${shortName(d.id)}</div>`;
+        if (d.props.length > 0) {
+          html += `<div class="tt-row" style="margin-top:6px;color:#4fc3f7">属性:</div>`;
+          d.props.forEach(p => {
+            const icon = p.type === 'object' ? '🔗' : '📄';
+            html += `<div class="tt-row">${icon} ${p.label} → ${p.range}</div>`;
+          });
+        }
+        tooltip.innerHTML = html;
+        tooltip.style.opacity = 1;
+        tooltip.style.left = (e.pageX + 12) + 'px';
+        tooltip.style.top = (e.pageY - 12) + 'px';
+      }).on('mouseout', () => { tooltip.style.opacity = 0; });
+
+      // Tick
+      simulation.on('tick', () => {
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        linkLabel.attr('x', d => (d.source.x + d.target.x) / 2)
+                 .attr('y', d => (d.source.y + d.target.y) / 2);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+
+      // Populate sidebar
+      const classList = document.getElementById('class-list');
+      const propList = document.getElementById('prop-list');
+      data.nodes.sort((a, b) => a.label.localeCompare(b.label)).forEach(n => {
+        const div = document.createElement('div');
+        div.className = 'item class-item';
+        div.textContent = `${n.label} (${n.props.length})`;
+        div.onclick = () => {
+          simulation.alpha(0.3).restart();
+          // Center on node
+          const transform = d3.zoomIdentity.translate(width/2 - n.x, height/2 - n.y);
+          svg.transition().duration(500).call(d3.zoom().transform, transform);
+        };
+        classList.appendChild(div);
+      });
+
+      // Unique properties
+      const allProps = new Set();
+      data.nodes.forEach(n => n.props.forEach(p => allProps.add(p.label + ' (' + p.type + ')')));
+      Array.from(allProps).sort().forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'item prop-item';
+        div.textContent = p;
+        propList.appendChild(div);
+      });
+    }
+
+    // Main
+    loadSchema().then(data => {
+      loading.style.display = 'none';
+      renderGraph(data);
+    }).catch(err => {
+      loading.textContent = '加载失败: ' + err.message;
+      loading.style.color = '#f44';
+    });
+  </script>
+</body>
+</html>

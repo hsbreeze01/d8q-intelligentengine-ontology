@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>d8q Ontology - Topo 视图</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #eee; overflow: hidden; }
+    
+    /* Nav */
+    nav { display: flex; align-items: center; gap: 20px; padding: 12px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+    nav h1 { font-size: 1.1em; color: #4fc3f7; }
+    nav a { color: #aaa; text-decoration: none; font-size: 0.9em; padding: 4px 12px; border-radius: 4px; transition: all 0.2s; }
+    nav a:hover { color: #fff; background: #0f3460; }
+    nav a.active { color: #4fc3f7; background: #0f3460; }
+    
+    /* Controls */
+    .controls { display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+    .controls label { font-size: 0.85em; color: #aaa; }
+    .controls select, .controls input { background: #0f3460; color: #eee; border: 1px solid #1a3a6e; padding: 6px 10px; border-radius: 4px; font-size: 0.85em; }
+    .controls button { background: #4fc3f7; color: #1a1a2e; border: none; padding: 6px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85em; }
+    .controls button:hover { background: #81d4fa; }
+    .controls .stats { margin-left: auto; font-size: 0.8em; color: #666; }
+
+    /* Graph */
+    .graph-area { position: relative; height: calc(100vh - 105px); }
+    svg { width: 100%; height: 100%; }
+    
+    /* Legend */
+    .legend { position: absolute; bottom: 16px; left: 16px; background: rgba(22,33,62,0.9); padding: 12px; border-radius: 8px; font-size: 0.8em; }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+    
+    /* Tooltip */
+    .tooltip { position: absolute; background: #16213e; border: 1px solid #0f3460; padding: 10px 14px; border-radius: 6px; font-size: 0.82em; pointer-events: none; opacity: 0; transition: opacity 0.2s; max-width: 400px; z-index: 100; }
+    .tooltip .tt-title { font-weight: bold; color: #4fc3f7; margin-bottom: 4px; }
+    .tooltip .tt-row { color: #ccc; margin: 2px 0; word-break: break-all; }
+    
+    /* Detail panel */
+    .detail-panel { position: absolute; top: 16px; right: 16px; width: 320px; max-height: calc(100% - 32px); overflow-y: auto; background: rgba(22,33,62,0.95); border: 1px solid #0f3460; border-radius: 8px; padding: 16px; display: none; }
+    .detail-panel.visible { display: block; }
+    .detail-panel h3 { color: #4fc3f7; font-size: 0.95em; margin-bottom: 10px; }
+    .detail-panel .close { position: absolute; top: 8px; right: 12px; cursor: pointer; color: #888; font-size: 1.2em; }
+    .detail-panel table { width: 100%; font-size: 0.8em; border-collapse: collapse; }
+    .detail-panel td { padding: 4px 6px; border-bottom: 1px solid #0f3460; }
+    .detail-panel td:first-child { color: #66bb6a; white-space: nowrap; }
+    
+    /* Loading */
+    .loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4fc3f7; }
+  </style>
+</head>
+<body>
+  <nav>
+    <h1>🧠 d8q Ontology</h1>
+    <a href="/explorer/">SPARQL</a>
+    <a href="/explorer/schema.html">建模视图</a>
+    <a href="/explorer/topo.html" class="active">Topo 视图</a>
+  </nav>
+  
+  <div class="controls">
+    <label>标的:</label>
+    <input type="text" id="symbol-input" placeholder="如 000001" value="" size="8">
+    <label>级别:</label>
+    <select id="level-select">
+      <option value="">全部</option>
+      <option value="D" selected>日线</option>
+      <option value="M30">30分钟</option>
+      <option value="H1">1小时</option>
+      <option value="W">周线</option>
+    </select>
+    <label>限制:</label>
+    <select id="limit-select">
+      <option value="50">50</option>
+      <option value="100" selected>100</option>
+      <option value="200">200</option>
+      <option value="500">500</option>
+    </select>
+    <button onclick="loadTopo()">加载拓扑</button>
+    <button onclick="loadAllInstances()" style="background:#66bb6a">全量实例</button>
+    <span class="stats" id="stats"></span>
+  </div>
+
+  <div class="graph-area">
+    <svg id="graph"></svg>
+    <div class="legend" id="legend"></div>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="detail-panel" id="detail">
+      <span class="close" onclick="closeDetail()">✕</span>
+      <h3 id="detail-title"></h3>
+      <table id="detail-table"></table>
+    </div>
+    <div class="loading" id="loading">选择条件后点击"加载拓扑"</div>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const SPARQL = '/sparql';
+    const tooltip = document.getElementById('tooltip');
+    const loading = document.getElementById('loading');
+    const stats = document.getElementById('stats');
+
+    // Color palette by rdf:type
+    const TYPE_COLORS = {
+      'Stroke': '#4fc3f7',
+      'LineSegment': '#66bb6a',
+      'Center': '#ffa726',
+      'BuyPoint': '#f44336',
+      'SellPoint': '#e91e63',
+      'TradePoint': '#ab47bc',
+      'Fractal': '#78909c',
+      'Symbol': '#ffee58',
+      'Level': '#80cbc4',
+    };
+    const DEFAULT_COLOR = '#607d8b';
+
+    function getColor(type) {
+      for (const [key, color] of Object.entries(TYPE_COLORS)) {
+        if (type && type.includes(key)) return color;
+      }
+      return DEFAULT_COLOR;
+    }
+
+    function shortName(uri) {
+      if (!uri) return '';
+      const clean = uri.replace(/^<|>$/g, '');
+      const idx = Math.max(clean.lastIndexOf('#'), clean.lastIndexOf('/'));
+      return clean.substring(idx + 1);
+    }
+
+    function cleanVal(val) {
+      if (!val) return '';
+      return val.replace(/^<|>$/g, '').replace(/^"|".*$/g, '');
+    }
+
+    async function query(sparql) {
+      const resp = await fetch(SPARQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'query=' + encodeURIComponent(sparql)
+      });
+      const data = await resp.json();
+      return data.results.bindings;
+    }
+
+    // --- Load topology for specific symbol/level ---
+    async function loadTopo() {
+      const symbol = document.getElementById('symbol-input').value.trim();
+      const level = document.getElementById('level-select').value;
+      const limit = document.getElementById('limit-select').value;
+
+      let filter = '';
+      if (symbol) filter += `FILTER(CONTAINS(STR(?s), "${symbol}"))`;
+
+      let levelFilter = '';
+      if (level) levelFilter = `
+        OPTIONAL { ?s <http://d8q.com/chan/hasLevel> ?lvl }
+        FILTER(!BOUND(?lvl) || CONTAINS(STR(?lvl), "${level}"))`;
+
+      const sparql = `
+        PREFIX chan: <http://d8q.com/chan/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        SELECT ?s ?p ?o WHERE {
+          ?s ?p ?o .
+          ${filter}
+          ${levelFilter}
+          FILTER(?p != rdf:type || !STRSTARTS(STR(?o), "http://www.w3.org"))
+        } LIMIT ${limit}`;
+
+      loading.textContent = '加载中...';
+      loading.style.display = 'block';
+
+      try {
+        const results = await query(sparql);
+        processAndRender(results);
+      } catch (err) {
+        loading.textContent = '加载失败: ' + err.message;
+        loading.style.color = '#f44';
+      }
+    }
+
+    // --- Load all instances (non-schema triples) ---
+    async function loadAllInstances() {
+      const limit = document.getElementById('limit-select').value;
+      const sparql = `
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?s ?p ?o WHERE {
+          ?s ?p ?o .
+          FILTER(!STRSTARTS(STR(?s), "http://www.w3.org"))
+          FILTER(?p != rdf:type)
+          FILTER(?p != rdfs:label)
+          FILTER(?p != rdfs:comment)
+          FILTER(?p != rdfs:subClassOf)
+          FILTER(?p != rdfs:domain)
+          FILTER(?p != rdfs:range)
+          FILTER(?p != owl:onProperty)
+          FILTER(?p != owl:someValuesFrom)
+          FILTER(?p != owl:onClass)
+          FILTER(?p != owl:cardinality)
+          FILTER(?p != owl:minQualifiedCardinality)
+        } LIMIT ${limit}`;
+
+      loading.textContent = '加载全量实例...';
+      loading.style.display = 'block';
+
+      try {
+        const results = await query(sparql);
+        processAndRender(results);
+      } catch (err) {
+        loading.textContent = '加载失败: ' + err.message;
+        loading.style.color = '#f44';
+      }
+    }
+
+    function processAndRender(results) {
+      if (results.length === 0) {
+        loading.textContent = '未查到实例数据。如果图谱中尚无实例，请先通过 /ingest API 写入数据。';
+        loading.style.color = '#ffa726';
+        return;
+      }
+
+      const nodesMap = new Map();
+      const links = [];
+
+      results.forEach(row => {
+        const s = cleanVal(row.s?.value);
+        const p = cleanVal(row.p?.value);
+        const o = cleanVal(row.o?.value);
+        if (!s || !p || !o) return;
+
+        // Subject is always a node
+        if (!nodesMap.has(s)) {
+          nodesMap.set(s, { id: s, name: shortName(s), type: '', props: {} });
+        }
+
+        // If object looks like a URI (contains / or #), treat as node + edge
+        if (o.includes('/') || o.includes('#')) {
+          if (!nodesMap.has(o)) {
+            nodesMap.set(o, { id: o, name: shortName(o), type: '', props: {} });
+          }
+          links.push({ source: s, target: o, label: shortName(p) });
+        } else {
+          // Literal value: attach as property
+          nodesMap.get(s).props[shortName(p)] = o;
+        }
+
+        // Try to detect type from rdf:type-like patterns
+        if (p.includes('type') || p.includes('Type')) {
+          nodesMap.get(s).type = shortName(o);
+        }
+      });
+
+      const nodes = Array.from(nodesMap.values());
+      loading.style.display = 'none';
+      stats.textContent = `节点: ${nodes.length} | 边: ${links.length} | 三元组: ${results.length}`;
+
+      renderForceGraph(nodes, links);
+      renderLegend(nodes);
+    }
+
+    let simulation = null;
+
+    function renderForceGraph(nodes, links) {
+      const svg = d3.select('#graph');
+      const width = svg.node().clientWidth;
+      const height = svg.node().clientHeight;
+      svg.selectAll('*').remove();
+
+      const g = svg.append('g');
+      svg.call(d3.zoom().scaleExtent([0.1, 6]).on('zoom', e => g.attr('transform', e.transform)));
+
+      // Arrow marker
+      svg.append('defs').append('marker')
+        .attr('id', 'topo-arrow')
+        .attr('viewBox', '0 -5 10 10').attr('refX', 20).attr('refY', 0)
+        .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+        .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#555');
+
+      simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(30));
+
+      // Links
+      const link = g.append('g').selectAll('line')
+        .data(links).join('line')
+        .attr('stroke', '#555').attr('stroke-width', 1.2)
+        .attr('marker-end', 'url(#topo-arrow)').attr('opacity', 0.6);
+
+      // Link labels
+      const linkLabel = g.append('g').selectAll('text')
+        .data(links).join('text')
+        .text(d => d.label)
+        .attr('font-size', '9px').attr('fill', '#666').attr('text-anchor', 'middle');
+
+      // Nodes
+      const node = g.append('g').selectAll('g')
+        .data(nodes).join('g')
+        .call(d3.drag()
+          .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+          .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+        );
+
+      node.append('circle')
+        .attr('r', d => Object.keys(d.props).length > 3 ? 14 : 10)
+        .attr('fill', d => getColor(d.type || d.name))
+        .attr('stroke', '#fff').attr('stroke-width', 1.5)
+        .attr('opacity', 0.9);
+
+      node.append('text')
+        .text(d => d.name.length > 16 ? d.name.slice(0, 14) + '…' : d.name)
+        .attr('dx', 14).attr('dy', '0.35em')
+        .attr('font-size', '10px').attr('fill', '#ccc');
+
+      // Hover tooltip
+      node.on('mouseover', (e, d) => {
+        let html = `<div class="tt-title">${d.name}</div>`;
+        if (d.type) html += `<div class="tt-row">type: ${d.type}</div>`;
+        const propKeys = Object.keys(d.props);
+        if (propKeys.length > 0) {
+          propKeys.slice(0, 8).forEach(k => {
+            html += `<div class="tt-row">${k}: ${d.props[k]}</div>`;
+          });
+          if (propKeys.length > 8) html += `<div class="tt-row">... +${propKeys.length - 8} more</div>`;
+        }
+        tooltip.innerHTML = html;
+        tooltip.style.opacity = 1;
+        tooltip.style.left = (e.pageX + 12) + 'px';
+        tooltip.style.top = (e.pageY - 12) + 'px';
+      }).on('mouseout', () => { tooltip.style.opacity = 0; });
+
+      // Click to show detail panel
+      node.on('click', (e, d) => showDetail(d));
+
+      simulation.on('tick', () => {
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        linkLabel.attr('x', d => (d.source.x + d.target.x) / 2)
+                 .attr('y', d => (d.source.y + d.target.y) / 2);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+    }
+
+    function renderLegend(nodes) {
+      const types = new Set(nodes.map(n => n.type || n.name).filter(Boolean));
+      const legend = document.getElementById('legend');
+      legend.innerHTML = '';
+      types.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'legend-item';
+        div.innerHTML = `<div class="legend-dot" style="background:${getColor(t)}"></div> ${t}`;
+        legend.appendChild(div);
+      });
+    }
+
+    function showDetail(d) {
+      const panel = document.getElementById('detail');
+      document.getElementById('detail-title').textContent = d.name + (d.type ? ` (${d.type})` : '');
+      const table = document.getElementById('detail-table');
+      table.innerHTML = '';
+      
+      const addRow = (k, v) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
+        table.appendChild(tr);
+      };
+      
+      addRow('URI', d.id);
+      if (d.type) addRow('type', d.type);
+      Object.entries(d.props).forEach(([k, v]) => addRow(k, v));
+      
+      panel.classList.add('visible');
+    }
+
+    function closeDetail() {
+      document.getElementById('detail').classList.remove('visible');
+    }
+  </script>
+</body>
+</html>
