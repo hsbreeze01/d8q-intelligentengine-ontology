@@ -17,12 +17,15 @@ def get_store() -> Store:
     STORE_PATH.mkdir(parents=True, exist_ok=True)
     _store = Store(str(STORE_PATH))
 
-    # Load TTL files
-    for ttl_file in sorted(ONTOLOGY_DIR.glob("*.ttl")):
-        print(f"[store] Loading {ttl_file.name}")
-        _store.load_file(str(ttl_file), format="text/turtle")
+    # Only load TTL if store is empty (first run or after clear)
+    if len(_store) == 0:
+        for ttl_file in sorted(ONTOLOGY_DIR.glob("*.ttl")):
+            print(f"[store] Loading {ttl_file.name}")
+            _store.load(path=str(ttl_file), format="text/turtle")
+        print(f"[store] Ontology loaded. Triples: {len(_store)}")
+    else:
+        print(f"[store] Store has {len(_store)} triples (persistent)")
 
-    print(f"[store] Ontology loaded. Triples: {len(_store)}")
     return _store
 
 

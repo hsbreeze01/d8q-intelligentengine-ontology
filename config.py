@@ -8,8 +8,8 @@ ONTOLOGY_DIR = BASE_DIR / "ontology"
 NAMED_GRAPH = "http://d8q.com/graph/chan"
 ONTOLOGY_IRI = "http://d8q.com/ontology/chan"
 
-# Oxigraph stores data in-memory by default, or persists to a directory
-STORE_PATH = BASE_DIR / "data" / "store"
+# Oxigraph persistent storage
+STORE_PATH = Path("/var/lib/d8q-ontology/store")
 
 # SPARQL endpoint path
 SPARQL_PATH = "/sparql"
